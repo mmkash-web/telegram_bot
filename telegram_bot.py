@@ -3,7 +3,7 @@ import asyncio
 import nest_asyncio
 import requests  # Import requests for making API calls
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 from dotenv import load_dotenv  # Import dotenv to load environment variables
 import os  # Import os to access environment variables
 
@@ -164,40 +164,34 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
                 elif status == 'SUCCESS':
                     await update.message.reply_text("Payment successful! Thank you for your purchase. Enjoy your data! 🎉")
                 else:
-                    await update.message.reply_text("Payment was unsuccessful. Please try again later.❌")
+                    await update.message.reply_text(f"Payment status: {status}. Please try again.")
             else:
-                await update.message.reply_text("Payment was unsuccessful. Please try again later.❌")
+                await update.message.reply_text(f"Payment failed: {response_json.get('message')}. Please try again.")
         else:
-            await update.message.reply_text("Failed to initiate payment. Please try again later.❌")
-
+            await update.message.reply_text("Failed to initiate payment. Please try again later.")
     except Exception as e:
-        # Log the exception for debugging
-        print(f"An error occurred: {e}")
-        await update.message.reply_text("An error occurred while processing your request. Please try again later.❌")
-
-# Function to handle errors
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f"Update {update} caused error {context.error}")
+        print(f"Error during STK push: {e}")
+        await update.message.reply_text("An error occurred while processing your request. Please try again later.")
 
 # Main function to run the bot
-if __name__ == "__main__":
-    # Create the Application and add handlers
-    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+def main():
+    application = Application.builder().token(os.getenv('BOT_TOKEN')).build()  # Get the bot token from environment variables
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", show_menu))
-    app.add_handler(ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+    # Set up conversation handler
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start), CommandHandler('menu', show_menu)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(choose_type)],
             CHOOSING_PACKAGE: [CallbackQueryHandler(choose_package)],
             GETTING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)],
         },
-        fallbacks=[CommandHandler("start", start)],
-    ))
+        fallbacks=[],
+    )
 
-    # Set error handler
-    app.add_error_handler(error_handler)
+    application.add_handler(conv_handler)
 
-    # Run the bot
-    app.run_polling()
+    # Start the bot
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
