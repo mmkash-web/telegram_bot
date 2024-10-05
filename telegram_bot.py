@@ -164,34 +164,40 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
                 elif status == 'SUCCESS':
                     await update.message.reply_text("Payment successful! Thank you for your purchase. Enjoy your data! 🎉")
                 else:
-                    await update.message.reply_text(f"Payment status: {status}. Please try again.")
+                    await update.message.reply_text("Payment was unsuccessful. Please try again later.❌")
             else:
-                await update.message.reply_text(f"Payment failed: {response_json.get('message')}. Please try again.")
+                await update.message.reply_text("Payment was unsuccessful. Please try again later.❌")
         else:
-            await update.message.reply_text("Failed to initiate payment. Please try again later.")
+            await update.message.reply_text("Failed to initiate payment. Please try again later.❌")
+
     except Exception as e:
-        print(f"Error during STK push: {e}")
-        await update.message.reply_text("An error occurred while processing your request. Please try again later.")
+        # Log the exception for debugging
+        print(f"An error occurred: {e}")
+        await update.message.reply_text("An error occurred while processing your request. Please try again later.❌")
+
+# Function to handle errors
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"Update {update} caused error {context.error}")
 
 # Main function to run the bot
-def main():
-    application = ApplicationBuilder().token(os.getenv('BOT_TOKEN')).build()  # Get the bot token from environment variables
+if __name__ == "__main__":
+    # Create the Application and add handlers
+    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
 
-    # Set up conversation handler
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start), CommandHandler('menu', show_menu)],
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", show_menu))
+    app.add_handler(ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_TYPE: [CallbackQueryHandler(choose_type)],
             CHOOSING_PACKAGE: [CallbackQueryHandler(choose_package)],
             GETTING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)],
         },
-        fallbacks=[],
-    )
+        fallbacks=[CommandHandler("start", start)],
+    ))
 
-    application.add_handler(conv_handler)
+    # Set error handler
+    app.add_error_handler(error_handler)
 
-    # Start the bot
-    application.run_polling()
-
-if __name__ == '__main__':
-    main()
+    # Run the bot
+    app.run_polling()
