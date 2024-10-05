@@ -34,13 +34,31 @@ encoded_credentials = base64.b64encode(credentials.encode()).decode()
 basic_auth_token = f"Basic {encoded_credentials}"
 
 # Data packages available for purchase
-data_packages = { ... }  # Keep your existing data packages
+data_packages = {
+    'data_1': ('1.25GB @ Ksh 55', 55),
+    'data_2': ('2.5GB @ Ksh 300', 300),
+    'data_3': ('1.5GB @ Ksh 50', 50),
+    'data_4': ('350MB @ Ksh 49', 49),
+    'data_5': ('6GB @ Ksh 700', 700),
+    'data_6': ('1GB @ Ksh 19', 19),
+    'data_7': ('250MB @ Ksh 20', 20),
+    'data_8': ('1GB @ Ksh 99', 99)
+}
 
 # SMS packages available for purchase
-sms_packages = { ... }  # Keep your existing SMS packages
+sms_packages = {
+    'sms_1': ('1000 SMS @ Ksh 30', 30),
+    'sms_2': ('200 SMS @ Ksh 10', 10),
+    'sms_3': ('20 SMS @ Ksh 5', 5)
+}
 
 # Minutes packages available for purchase
-minutes_packages = { ... }  # Keep your existing minutes packages
+minutes_packages = {
+    'min_1': ('34MIN @ Ksh 18', 18),
+    'min_2': ('50MIN @ Ksh 51', 51),
+    'min_3': ('100MIN @ Ksh 102', 102),
+    'min_4': ('200MIN @ Ksh 250', 250)
+}
 
 # Conversation states
 CHOOSING_PACKAGE, GETTING_PHONE, CHOOSING_TYPE = range(3)
