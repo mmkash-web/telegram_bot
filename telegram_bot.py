@@ -2,7 +2,7 @@ import base64
 import asyncio
 import nest_asyncio
 import requests
-import logging  # Import logging for better debug information
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 from dotenv import load_dotenv
@@ -33,30 +33,30 @@ credentials = f"{API_USERNAME}:{API_PASSWORD}"
 encoded_credentials = base64.b64encode(credentials.encode()).decode()
 basic_auth_token = f"Basic {encoded_credentials}"
 
-# Data packages available for purchase
+# Data packages available for purchase (sorted by expiry)
 data_packages = {
-    'data_1': ('1.25GB @ Ksh 55', 55),
-    'data_2': ('2.5GB @ Ksh 300', 300),
-    'data_3': ('1.5GB @ Ksh 50', 50),
-    'data_4': ('350MB @ Ksh 49', 49),
-    'data_5': ('6GB @ Ksh 700', 700),
-    'data_6': ('1GB @ Ksh 19', 19),
-    'data_7': ('250MB @ Ksh 20', 20),
-    'data_8': ('1GB @ Ksh 99', 99)
+    'data_6': ('1GB @ Ksh 19 (valid for 1 hour)', 19),
+    'data_3': ('1.5GB @ Ksh 50 (valid for 3 hours)', 50),
+    'data_1': ('1.25GB @ Ksh 55 (valid till midnight)', 55),
+    'data_4': ('350MB @ Ksh 49 (valid for 7 days)', 49),
+    'data_2': ('2.5GB @ Ksh 300 (valid for 7 days)', 300),
+    'data_5': ('6GB @ Ksh 700 (valid for 7 days)', 700),
+    'data_7': ('250MB @ Ksh 20 (valid for 24 hours)', 20),
+    'data_8': ('1GB @ Ksh 99 (valid for 24 hours)', 99)
 }
 
-# SMS packages available for purchase
+# SMS packages available for purchase (sorted by expiry)
 sms_packages = {
-    'sms_1': ('1000 SMS @ Ksh 30', 30),
-    'sms_2': ('200 SMS @ Ksh 10', 10),
-    'sms_3': ('20 SMS @ Ksh 5', 5)
+    'sms_3': ('20 SMS @ Ksh 5 (valid for 24 hours)', 5),
+    'sms_2': ('200 SMS @ Ksh 10 (valid for 24 hours)', 10),
+    'sms_1': ('1000 SMS @ Ksh 30 (valid for 7 days)', 30)
 }
 
-# Minutes packages available for purchase
+# Minutes packages available for purchase (sorted by expiry)
 minutes_packages = {
-    'min_1': ('34MIN @ Ksh 18', 18),
+    'min_1': ('34MIN @ Ksh 18 (expiry: midnight)', 18),
     'min_2': ('50MIN @ Ksh 51', 51),
-    'min_3': ('100MIN @ Ksh 102', 102),
+    'min_3': ('100MIN @ Ksh 102 (valid for 2 days)', 102),
     'min_4': ('200MIN @ Ksh 250', 250)
 }
 
@@ -78,6 +78,11 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Select a deal type:", reply_markup=reply_markup)
     return CHOOSING_TYPE
 
+async def cancel_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.callback_query.answer()  # Acknowledge the callback query
+    await update.callback_query.message.reply_text("Purchase has been cancelled. You can start again by sending /menu.")
+    return ConversationHandler.END  # End the conversation
+
 async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -87,13 +92,16 @@ async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
     if deal_type == 'data':
         keyboard = [[InlineKeyboardButton(text=value[0], callback_data=key)] for key, value in data_packages.items()]
-        await query.message.reply_text("AVAILABLE DEALS. KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU:✅", reply_markup=InlineKeyboardMarkup(keyboard))
     elif deal_type == 'sms':
         keyboard = [[InlineKeyboardButton(text=value[0], callback_data=key)] for key, value in sms_packages.items()]
-        await query.message.reply_text("AVAILABLE DEALS. KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU:✅", reply_markup=InlineKeyboardMarkup(keyboard))
     elif deal_type == 'minutes':
         keyboard = [[InlineKeyboardButton(text=value[0], callback_data=key)] for key, value in minutes_packages.items()]
-        await query.message.reply_text("AVAILABLE DEALS. KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU:✅", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # Add cancel button at the bottom
+    keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
+
+    # Send the message with the deals and buttons vertically centered
+    await query.message.reply_text("AVAILABLE DEALS. KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU:✅", reply_markup=InlineKeyboardMarkup(keyboard))
 
     return CHOOSING_PACKAGE
 
@@ -154,7 +162,7 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
                 logger.info(f"STK Push Status: {status}")
 
                 if status == 'QUEUED':
-                    await update.message.reply_text("Please enter your mpesa pin to pay.✅ for help click here @emmkash.")
+                    await update.message.reply_text("Please enter your M-Pesa PIN to proceed with payment.✅ For help, click here @emmkash.")
                 elif status == 'SUCCESS':
                     await update.message.reply_text("Payment successful! Thank you for your purchase. Enjoy your data! 🎉")
                 else:
@@ -177,7 +185,7 @@ def main():
             CHOOSING_PACKAGE: [CallbackQueryHandler(choose_package)],
             GETTING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)],
         },
-        fallbacks=[],
+        fallbacks=[CommandHandler('cancel', cancel_purchase), CallbackQueryHandler(cancel_purchase, pattern='cancel_purchase')]
     )
 
     application.add_handler(conv_handler)
