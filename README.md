@@ -114,7 +114,7 @@ Check logs and ensure that your bot is running smoothly. You can check logs or a
 ### Conclusion
 Once everything is set up, your Telegram bot will be hosted on your VPS and should be ready to respond to users. Make sure to test it thoroughly! If you have specific questions about any of the steps, feel free to ask!
 
-
+### HOW RO MAKE UPDATES
 Updating your Telegram bot hosted on a VPS is straightforward. Here’s a step-by-step guide to manage updates to your bot effectively:
 
 ### Step 1: Access Your VPS
