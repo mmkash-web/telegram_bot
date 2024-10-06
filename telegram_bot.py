@@ -26,7 +26,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 # Check if required environment variables are set
 if not all([API_USERNAME, API_PASSWORD, BOT_TOKEN]):
     logger.error("API_USERNAME, API_PASSWORD, and BOT_TOKEN must be set in the environment.")
-    raise EnvironmentError("Required environment variables not set.")
+    raise EnvironmentError("Required environment variables not set. Please check your .env file.")
 
 # Concatenating username and password with a colon
 credentials = f"{API_USERNAME}:{API_PASSWORD}"
@@ -65,7 +65,7 @@ CHOOSING_PACKAGE, GETTING_PHONE, CHOOSING_TYPE = range(3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_first_name = update.effective_user.first_name
-    await update.message.reply_text(f"WELCOME TO BINGWA SOKONI BOT BY EMMKASH TECH 🥳🎉, {user_first_name}! SEND /menu TO VIEW DEAL.")
+    await update.message.reply_text(f"Welcome to Bingwa Sokoni Bot by Emmkash Tech, {user_first_name}! Send /menu to view deals.")
     return ConversationHandler.END
 
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -79,9 +79,9 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return CHOOSING_TYPE
 
 async def cancel_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.callback_query.answer()  # Acknowledge the callback query
+    await update.callback_query.answer()
     await update.callback_query.message.reply_text("Purchase has been cancelled. You can start again by sending /menu.")
-    return ConversationHandler.END  # End the conversation
+    return ConversationHandler.END
 
 async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -96,12 +96,10 @@ async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         keyboard = [[InlineKeyboardButton(text=value[0], callback_data=key)] for key, value in sms_packages.items()]
     elif deal_type == 'minutes':
         keyboard = [[InlineKeyboardButton(text=value[0], callback_data=key)] for key, value in minutes_packages.items()]
-    
-    # Add cancel button at the bottom
+
     keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
 
-    # Send the message with the deals and buttons vertically centered
-    await query.message.reply_text("AVAILABLE DEALS. KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU:✅", reply_markup=InlineKeyboardMarkup(keyboard))
+    await query.message.reply_text("Available Deals. Remember to purchase only once a day.", reply_markup=InlineKeyboardMarkup(keyboard))
 
     return CHOOSING_PACKAGE
 
@@ -149,7 +147,6 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
     try:
         response = requests.post(stk_push_url, json=payload, headers={"Authorization": basic_auth_token})
 
-        # Log the status code and response content for debugging
         logger.info(f"Response Status Code: {response.status_code}")
         logger.info(f"Response Content: {response.text}")
 
@@ -162,9 +159,9 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
                 logger.info(f"STK Push Status: {status}")
 
                 if status == 'QUEUED':
-                    await update.message.reply_text("Please enter your M-Pesa PIN to proceed with payment.✅ For help, click here @emmkash.")
+                    await update.message.reply_text("Please enter your M-Pesa PIN to proceed with payment. For help, click here @emmkash.")
                 elif status == 'SUCCESS':
-                    await update.message.reply_text("Payment successful! Thank you for your purchase. Enjoy your data! 🎉")
+                    await update.message.reply_text("Payment successful! Thank you for your purchase. Enjoy your data!")
                 else:
                     await update.message.reply_text(f"Payment status: {status}. Please try again.")
             else:
@@ -194,3 +191,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
