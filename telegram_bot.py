@@ -73,6 +73,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         [InlineKeyboardButton("Data Deals", callback_data='data')],
         [InlineKeyboardButton("SMS Deals", callback_data='sms')],
         [InlineKeyboardButton("Minutes Deals", callback_data='minutes')],
+        [InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Select a deal type:", reply_markup=reply_markup)
@@ -91,15 +92,20 @@ async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     context.user_data['deal_type'] = deal_type
 
     if deal_type == 'data':
-        keyboard = [[InlineKeyboardButton(text=value[0], callback_data=key)] for key, value in data_packages.items()]
+        packages = data_packages
     elif deal_type == 'sms':
-        keyboard = [[InlineKeyboardButton(text=value[0], callback_data=key)] for key, value in sms_packages.items()]
+        packages = sms_packages
     elif deal_type == 'minutes':
-        keyboard = [[InlineKeyboardButton(text=value[0], callback_data=key)] for key, value in minutes_packages.items()]
+        packages = minutes_packages
 
-    keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
+    # Create the inline keyboard for packages arranged vertically
+    vertical_keyboard = []
+    for key, value in packages.items():
+        vertical_keyboard.append([InlineKeyboardButton(value[0], callback_data=key)])
+    vertical_keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
 
-    await query.message.reply_text("Available Deals. Remember to purchase only once a day.", reply_markup=InlineKeyboardMarkup(keyboard))
+    reply_markup = InlineKeyboardMarkup(vertical_keyboard)
+    await query.message.reply_text("Select a deal:", reply_markup=reply_markup)
 
     return CHOOSING_PACKAGE
 
@@ -117,7 +123,18 @@ async def choose_package(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif deal_type == 'minutes':
         context.user_data['package'] = minutes_packages[package_number]
 
-    await query.message.reply_text(f"You selected: {context.user_data['package'][0]}. Please enter your phone number:")
+    # Create a vertical list for the selected package
+    keyboard = [
+        [InlineKeyboardButton("Confirm", callback_data='confirm_purchase')],
+        [InlineKeyboardButton("Cancel", callback_data='cancel_purchase')],
+    ]
+
+    await query.message.reply_text(
+        f"You selected: {context.user_data['package'][0]}. "
+        f"Please enter your phone number:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
     return GETTING_PHONE
 
 async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -158,21 +175,20 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
                 status = response_json.get('status')
                 logger.info(f"STK Push Status: {status}")
 
-                if status == 'QUEUED':
-                    await update.message.reply_text("Please enter your M-Pesa PIN to proceed with payment. For help, click here @emmkash.")
-                elif status == 'SUCCESS':
-                    await update.message.reply_text("Payment successful! Thank you for your purchase. Enjoy your data!")
+                if status == 'SUCCESS':
+                    await update.message.reply_text("Payment successful! Thank you for your purchase.")
                 else:
-                    await update.message.reply_text(f"Payment status: {status}. Please try again.")
+                    await update.message.reply_text("Payment processing. Please wait for confirmation for help click here @emmkash")
             else:
-                await update.message.reply_text(f"Payment failed: {response_json.get('message')}. Please try again.")
+                await update.message.reply_text("Payment failed. Please try again.")
         else:
-            await update.message.reply_text("Failed to initiate payment. Please try again later.")
-    except Exception as e:
-        logger.error(f"Error during STK push: {e}")
-        await update.message.reply_text("An error occurred while processing your request. Please try again later.")
+            await update.message.reply_text("Error occurred while processing your payment. Please try again.")
 
-def main():
+    except Exception as e:
+        logger.error(f"Error initiating STK push: {e}")
+        await update.message.reply_text("An error occurred while processing your payment. Please try again.")
+
+def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -182,13 +198,11 @@ def main():
             CHOOSING_PACKAGE: [CallbackQueryHandler(choose_package)],
             GETTING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)],
         },
-        fallbacks=[CommandHandler('cancel', cancel_purchase), CallbackQueryHandler(cancel_purchase, pattern='cancel_purchase')]
+        fallbacks=[CallbackQueryHandler(cancel_purchase, pattern='cancel_purchase')],
     )
 
     application.add_handler(conv_handler)
-
     application.run_polling()
 
 if __name__ == '__main__':
     main()
-
