@@ -53,7 +53,7 @@ Replace `your_server_ip` with the IP address of your VPS.
 You can transfer your code to the VPS in several ways:
 - **Clone from GitHub**:
    ```bash
-   git clone https://github.com/Emmkash20/autoscriptssh.git
+   git clone https://github.com/mmkash-web/telegram_bot.git
    ```
 
 - **Upload using SCP**:
@@ -182,7 +182,7 @@ cd /path/to/your/bot
 git pull origin main
 pip install -r requirements.txt
 # Restart the bot using screen
-screen -S your_bot_session_name -p 0 -X stuff "python3 bingwa_sokoni_bot.py$(echo -ne '\015')"
+screen -S your_bot_session_name -p 0 -X stuff "python3 telegram_bot.py$(echo -ne '\015')"
 ```
 Make it executable:
 ```bash
