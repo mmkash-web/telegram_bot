@@ -59,6 +59,8 @@ You can transfer your code to the VPS in several ways:
 - **Upload using SCP**:
    ```bash
    scp /path/to/your/local/bingwa_sokoni_bot.py root@your_server_ip:/path/to/destination
+
+   e.g scp ~/Documents/telegram_bot.py root@95.143.191.171:/home/root/
    ```
 
 ### Step 6: Configure Environment Variables
