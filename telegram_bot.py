@@ -1,4 +1,3 @@
-
 import base64
 import nest_asyncio
 import requests
@@ -128,7 +127,7 @@ async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text("Select a deal:", reply_markup=reply_markup)
+    await query.message.reply_text("CHAGUA DEAL YAKO:KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU MKUU ", reply_markup=reply_markup)
     return CHOOSING_PACKAGE
 
 async def choose_package(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
