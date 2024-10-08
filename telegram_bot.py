@@ -1,58 +1,67 @@
+
 import base64
-import asyncio
 import nest_asyncio
 import requests
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ConversationHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
 from dotenv import load_dotenv
 import os
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Allow nested event loops
+# Allow nested event loops (useful for environments like Jupyter)
 nest_asyncio.apply()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# Your API username and password from environment variables
+# Load environment variables
 API_USERNAME = os.getenv('API_USERNAME')
 API_PASSWORD = os.getenv('API_PASSWORD')
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
-# Check if required environment variables are set
+# Verify that all required environment variables are set
 if not all([API_USERNAME, API_PASSWORD, BOT_TOKEN]):
     logger.error("API_USERNAME, API_PASSWORD, and BOT_TOKEN must be set in the environment.")
     raise EnvironmentError("Required environment variables not set. Please check your .env file.")
 
-# Concatenating username and password with a colon
+# Create Basic Auth token
 credentials = f"{API_USERNAME}:{API_PASSWORD}"
 encoded_credentials = base64.b64encode(credentials.encode()).decode()
 basic_auth_token = f"Basic {encoded_credentials}"
 
-# Data packages available for purchase (sorted by expiry)
+# Define packages with callback_data matching dictionary keys
 data_packages = {
-    'data_6': ('1GB @ Ksh 19 (valid for 1 hour)', 19),
-    'data_3': ('1.5GB @ Ksh 50 (valid for 3 hours)', 50),
-    'data_1': ('1.25GB @ Ksh 55 (valid till midnight)', 55),
+    'data_1': ('1GB @ Ksh 19 (valid for 1 hour)', 19),
+    'data_2': ('1.5GB @ Ksh 50 (valid for 3 hours)', 50),
+    'data_3': ('1.25GB @ Ksh 55 (valid till midnight)', 55),
     'data_4': ('350MB @ Ksh 49 (valid for 7 days)', 49),
-    'data_2': ('2.5GB @ Ksh 300 (valid for 7 days)', 300),
-    'data_5': ('6GB @ Ksh 700 (valid for 7 days)', 700),
+    'data_5': ('2.5GB @ Ksh 300 (valid for 7 days)', 300),
+    'data_6': ('6GB @ Ksh 700 (valid for 7 days)', 700),
     'data_7': ('250MB @ Ksh 20 (valid for 24 hours)', 20),
     'data_8': ('1GB @ Ksh 99 (valid for 24 hours)', 99)
 }
 
-# SMS packages available for purchase (sorted by expiry)
 sms_packages = {
-    'sms_3': ('20 SMS @ Ksh 5 (valid for 24 hours)', 5),
+    'sms_1': ('1000 SMS @ Ksh 30 (valid for 7 days)', 30),
     'sms_2': ('200 SMS @ Ksh 10 (valid for 24 hours)', 10),
-    'sms_1': ('1000 SMS @ Ksh 30 (valid for 7 days)', 30)
+    'sms_3': ('20 SMS @ Ksh 5 (valid for 24 hours)', 5)
 }
 
-# Minutes packages available for purchase (sorted by expiry)
 minutes_packages = {
     'min_1': ('34MIN @ Ksh 18 (expiry: midnight)', 18),
     'min_2': ('50MIN @ Ksh 51', 51),
@@ -60,15 +69,19 @@ minutes_packages = {
     'min_4': ('200MIN @ Ksh 250', 250)
 }
 
-# Conversation states
-CHOOSING_PACKAGE, GETTING_PHONE, CHOOSING_TYPE = range(3)
+# Define Conversation States
+CHOOSING_TYPE, CHOOSING_PACKAGE, GETTING_PHONE = range(3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Send a welcome message and prompt user to view menu."""
     user_first_name = update.effective_user.first_name
-    await update.message.reply_text(f"Welcome to Bingwa Sokoni Bot by Emmkash Tech, {user_first_name}! Send /menu to view deals.")
+    await update.message.reply_text(
+        f"Welcome to Bingwa Sokoni Bot by Emmkash Tech, {user_first_name}! Send /menu to view deals."
+    )
     return ConversationHandler.END
 
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Display the main menu with deal types."""
     keyboard = [
         [InlineKeyboardButton("Data Deals", callback_data='data')],
         [InlineKeyboardButton("SMS Deals", callback_data='sms')],
@@ -80,76 +93,100 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return CHOOSING_TYPE
 
 async def cancel_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.callback_query.answer()
-    await update.callback_query.message.reply_text("Purchase has been cancelled. You can start again by sending /menu.")
+    """Handle the cancellation of a purchase."""
+    query = update.callback_query
+    await query.answer()
+    await query.message.reply_text(
+        "You have cancelled the purchase. If you need assistance, click here @emmkash. You can restart anytime by sending /menu."
+    )
     return ConversationHandler.END
 
 async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the selection of deal type and display relevant packages."""
     query = update.callback_query
     await query.answer()
 
     deal_type = query.data
+    logger.info(f"Deal type selected: {deal_type}")
     context.user_data['deal_type'] = deal_type
 
+    # Select the appropriate packages based on deal type
     if deal_type == 'data':
         packages = data_packages
     elif deal_type == 'sms':
         packages = sms_packages
     elif deal_type == 'minutes':
         packages = minutes_packages
+    else:
+        await query.message.reply_text("Invalid selection. Please try again.")
+        return ConversationHandler.END
 
-    # Create the inline keyboard for packages arranged vertically
-    vertical_keyboard = []
+    # Create keyboard for packages
+    keyboard = []
     for key, value in packages.items():
-        vertical_keyboard.append([InlineKeyboardButton(value[0], callback_data=key)])
-    vertical_keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
+        keyboard.append([InlineKeyboardButton(value[0], callback_data=key)])
+    keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
 
-    reply_markup = InlineKeyboardMarkup(vertical_keyboard)
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.reply_text("Select a deal:", reply_markup=reply_markup)
-
     return CHOOSING_PACKAGE
 
 async def choose_package(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the selection of a specific package and prompt for phone number."""
     query = update.callback_query
     await query.answer()
 
-    package_number = query.data
-    deal_type = context.user_data['deal_type']
+    package_key = query.data
+    deal_type = context.user_data.get('deal_type')
+    logger.info(f"Package selected: {package_key} for deal type: {deal_type}")
 
+    # Retrieve the selected package based on deal type
     if deal_type == 'data':
-        context.user_data['package'] = data_packages[package_number]
+        selected_package = data_packages.get(package_key)
     elif deal_type == 'sms':
-        context.user_data['package'] = sms_packages[package_number]
+        selected_package = sms_packages.get(package_key)
     elif deal_type == 'minutes':
-        context.user_data['package'] = minutes_packages[package_number]
+        selected_package = minutes_packages.get(package_key)
+    else:
+        selected_package = None
 
-    # Create a vertical list for the selected package
-    keyboard = [
-        [InlineKeyboardButton("Confirm", callback_data='confirm_purchase')],
-        [InlineKeyboardButton("Cancel", callback_data='cancel_purchase')],
-    ]
+    if selected_package is None:
+        logger.error(f"Invalid package selection: {package_key} for deal type: {deal_type}")
+        await query.message.reply_text("Invalid package selection. Please try again.")
+        return ConversationHandler.END
+
+    context.user_data['package'] = selected_package
 
     await query.message.reply_text(
-        f"You selected: {context.user_data['package'][0]}. "
-        f"Please enter your phone number:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        f"You selected: {selected_package[0]}.\nPlease enter your phone number:"
     )
-    
+
     return GETTING_PHONE
 
 async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    phone_number = update.message.text
+    """Handle the phone number input and initiate payment."""
+    phone_number = update.message.text.strip()
     context.user_data['phone_number'] = phone_number
-    selected_package = context.user_data['package']
+    selected_package = context.user_data.get('package')
 
-    await update.message.reply_text(f"Package: {selected_package[0]}\nPhone Number: {phone_number}\n\nProceeding with payment...")
+    logger.info(f"Phone number entered: {phone_number}")
 
-    # Initiate STK push
+    if selected_package is None:
+        await update.message.reply_text("No package selected. Please try again.")
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        f"Package: {selected_package[0]}\nPhone Number: {phone_number}\n\nProceeding with payment..."
+    )
+
+    # Initiate STK Push
     await initiate_stk_push(phone_number, selected_package[1], update)
 
-    return ConversationHandler.END
+    # Allow user to choose another type after payment
+    return CHOOSING_TYPE
 
 async def initiate_stk_push(phone_number: str, amount: int, update: Update):
+    """Initiate STK Push payment via PayHero API."""
     stk_push_url = "https://backend.payhero.co.ke/api/v2/payments"
 
     payload = {
@@ -161,14 +198,16 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         "callback_url": "https://softcash.co.ke/billing/callbackurl.php"
     }
 
-    try:
-        response = requests.post(stk_push_url, json=payload, headers={"Authorization": basic_auth_token})
+    headers = {"Authorization": basic_auth_token}
 
-        logger.info(f"Response Status Code: {response.status_code}")
-        logger.info(f"Response Content: {response.text}")
+    try:
+        response = requests.post(stk_push_url, json=payload, headers=headers)
+
+        logger.info(f"STK Push Response Status Code: {response.status_code}")
+        logger.info(f"STK Push Response Content: {response.text}")
 
         response_json = response.json()
-        logger.info(f"Response JSON: {response_json}")
+        logger.info(f"STK Push Response JSON: {response_json}")
 
         if response.status_code in [200, 201]:
             if response_json.get('success'):
@@ -176,9 +215,9 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
                 logger.info(f"STK Push Status: {status}")
 
                 if status == 'SUCCESS':
-                    await update.message.reply_text("Payment successful! Thank you for your purchase.")
+                    await update.message.reply_text("Payment successful! Thank you for your purchase.🥳✅")
                 else:
-                    await update.message.reply_text("Payment processing. Please wait for confirmation for help click here @emmkash")
+                    await update.message.reply_text("Payment processing. Please wait for confirmation✅✅🥳 For help, click here @emmkash")
             else:
                 await update.message.reply_text("Payment failed. Please try again.")
         else:
@@ -189,19 +228,33 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         await update.message.reply_text("An error occurred while processing your payment. Please try again.")
 
 def main() -> None:
-    application = Application.builder().token(BOT_TOKEN).build()
+    """Start the Telegram bot."""
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Define handlers
+    menu_handler = CommandHandler('menu', show_menu)
+    start_handler = CommandHandler('start', show_menu)  # Link /start to show_menu
+
+    choose_type_handler = CallbackQueryHandler(choose_type, pattern='^(data|sms|minutes)$')
+    choose_package_handler = CallbackQueryHandler(choose_package, pattern='^(data_\d+|sms_\d+|min_\d+)$')
+    cancel_handler = CallbackQueryHandler(cancel_purchase, pattern='^cancel_purchase$')
+    phone_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)
+
+    # Define ConversationHandler
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start), CommandHandler('menu', show_menu)],
+        entry_points=[start_handler, menu_handler],
         states={
-            CHOOSING_TYPE: [CallbackQueryHandler(choose_type)],
-            CHOOSING_PACKAGE: [CallbackQueryHandler(choose_package)],
-            GETTING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)],
+            CHOOSING_TYPE: [choose_type_handler],
+            CHOOSING_PACKAGE: [choose_package_handler],
+            GETTING_PHONE: [phone_handler],
         },
-        fallbacks=[CallbackQueryHandler(cancel_purchase, pattern='cancel_purchase')],
+        fallbacks=[cancel_handler]
     )
 
+    # Add handlers to the application
     application.add_handler(conv_handler)
+
+    logger.info("Starting Bingwa Sokoni Bot...")
     application.run_polling()
 
 if __name__ == '__main__':
