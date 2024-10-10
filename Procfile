@@ -1,1 +1,1 @@
-worker: python injector.py
+worker: python telegram_bot.py
