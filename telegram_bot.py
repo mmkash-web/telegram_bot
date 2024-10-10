@@ -45,27 +45,33 @@ basic_auth_token = f"Basic {encoded_credentials}"
 
 # Define packages with callback_data matching dictionary keys
 data_packages = {
-    'data_1': ('1GB @ Ksh 19 (valid for 1 hour)', 19),
-    'data_2': ('1.5GB @ Ksh 50 (valid for 3 hours)', 50),
-    'data_3': ('1.25GB @ Ksh 55 (valid till midnight)', 55),
-    'data_4': ('350MB @ Ksh 49 (valid for 7 days)', 49),
-    'data_5': ('2.5GB @ Ksh 300 (valid for 7 days)', 300),
-    'data_6': ('6GB @ Ksh 700 (valid for 7 days)', 700),
-    'data_7': ('250MB @ Ksh 20 (valid for 24 hours)', 20),
-    'data_8': ('1GB @ Ksh 99 (valid for 24 hours)', 99)
+    'data_1': ('1GB, 1hr @ Ksh 19', 19),
+    'data_2': ('250MB, 24hrs @ Ksh 20', 20),
+    'data_3': ('1GB, 24hrs @ Ksh 99', 99),
+    'data_4': ('1.5GB, 3hrs @ Ksh 49', 49),
+    'data_5': ('350MB, 7 days @ Ksh 47', 47),
+    'data_6': ('1.25GB, till midnight @ Ksh 55', 55),
+    'data_7': ('2.5GB, 7 days @ Ksh 300', 300),
+    'data_8': ('6GB, 7 days @ Ksh 700', 700),
+    'data_9': ('1.2GB, 30days @ Ksh 250', 250),
+    'data_10': ('2.5GB, 30days @ Ksh 500', 500),
+    'data_11': ('10GB, 30days @ Ksh 1,001', 1001)
 }
 
 sms_packages = {
-    'sms_1': ('1000 SMS @ Ksh 30 (valid for 7 days)', 30),
-    'sms_2': ('200 SMS @ Ksh 10 (valid for 24 hours)', 10),
-    'sms_3': ('20 SMS @ Ksh 5 (valid for 24 hours)', 5)
+    'sms_1': ('20 SMS, 1day @ Ksh 5', 5),
+    'sms_2': ('200 SMS, 1day @ Ksh 10', 10),
+    'sms_3': ('100 SMS, 7day @ Ksh 21', 21),
+    'sms_4': ('1,000 SMS, 7day @ Ksh 30', 30),
+    'sms_5': ('1,500 SMS, 30day @ Ksh 101', 101),
+    'sms_6': ('3,500 SMS, 30day @ Ksh 201', 201)
 }
 
 minutes_packages = {
-    'min_1': ('34MIN @ Ksh 18 (expiry: midnight)', 18),
-    'min_2': ('50MIN @ Ksh 51', 51),
-    'min_3': ('100MIN @ Ksh 102 (valid for 2 days)', 102),
-    'min_4': ('200MIN @ Ksh 250', 250)
+     'min_1': ('50 flex, till midnight @ Ksh 50', 50),
+    'min_2': ('300min, 30day @ Ksh 499', 499),
+    'min_3': ('8GB+400min, 30day @ Ksh 999', 999),
+    'min_4': ('800min, 30day @ Ksh 1,000', 1000)
 }
 
 # Define Conversation States
