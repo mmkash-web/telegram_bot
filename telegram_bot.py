@@ -1,226 +1,265 @@
-import os
-import logging
-import json
-import time
 import base64
+import nest_asyncio
 import requests
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ConversationHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Allow nested event loops (useful for environments like Jupyter)
+nest_asyncio.apply()
 
 # Configure logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s', level=logging.INFO
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-BOT_TOKEN = "7626726530:AAHnNs51Ew8_lZEnD0VLXkAJBvpAVyRzLig"  # Your bot token
-PAYHERO_API_URL = "https://backend.payhero.co.ke/api/v2/payments"
-API_USERNAME = "5iOsVi1JBm2fDQJl5LPD"
-API_PASSWORD = "vNxb1zHkPV2tYro4SgRDXhTtWBEr8R46EQiBUvkD"
+API_USERNAME = os.getenv('API_USERNAME')
+API_PASSWORD = os.getenv('API_PASSWORD')
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 
-# Load file links from JSON
-def load_links():
-    """Load file links from links.json."""
-    with open('links.json', 'r') as file:
-        return json.load(file)
+# Verify that all required environment variables are set
+if not all([API_USERNAME, API_PASSWORD, BOT_TOKEN]):
+    logger.error("API_USERNAME, API_PASSWORD, and BOT_TOKEN must be set in the environment.")
+    raise EnvironmentError("Required environment variables not set. Please check your .env file.")
 
-# Load the links into variables
-links = load_links()
-FILE_LINKS_10_DAYS = links["HTTP_10_DAYS"]
-FILE_LINKS_14_DAYS = links["HTTP_14_DAYS"]
+# Create Basic Auth token
+credentials = f"{API_USERNAME}:{API_PASSWORD}"
+encoded_credentials = base64.b64encode(credentials.encode()).decode()
+basic_auth_token = f"Basic {encoded_credentials}"
 
-# Store the current index of the link sent for each file type
-current_link_index = {
-    "HTTP_10_DAYS": 0,
-    "HTTP_14_DAYS": 0,
+# Define packages with callback_data matching dictionary keys
+data_packages = {
+    'data_1': ('1GB, 1hr @ Ksh 19', 19),
+    'data_2': ('250MB, 24hrs @ Ksh 20', 20),
+    'data_3': ('1GB, 24hrs @ Ksh 99', 99),
+    'data_4': ('1.5GB, 3hrs @ Ksh 49', 49),
+    'data_5': ('350MB, 7 days @ Ksh 47', 47),
+    'data_6': ('1.25GB, till midnight @ Ksh 55', 55),
+    'data_7': ('2.5GB, 7 days @ Ksh 300', 300),
+    'data_8': ('6GB, 7 days @ Ksh 700', 700),
+    'data_9': ('1.2GB, 30days @ Ksh 250', 250),
+    'data_10': ('2.5GB, 30days @ Ksh 500', 500),
+    'data_11': ('10GB, 30days @ Ksh 1,001', 1001)
 }
 
-# Store sent config links and confirmation status for each user
-user_sent_links = {}
+sms_packages = {
+    'sms_1': ('20 SMS, 1day @ Ksh 5', 5),
+    'sms_2': ('200 SMS, 1day @ Ksh 10', 10),
+    'sms_3': ('100 SMS, 7day @ Ksh 21', 21),
+    'sms_4': ('1,000 SMS, 7day @ Ksh 30', 30),
+    'sms_5': ('1,500 SMS, 30day @ Ksh 101', 101),
+    'sms_6': ('3,500 SMS, 30day @ Ksh 201', 201)
+}
 
-# Track used M-Pesa confirmation messages globally
-used_confirmation_messages = set()
+minutes_packages = {
+     'min_1': ('50 flex, till midnight @ Ksh 50', 50),
+    'min_2': ('300min, 30day @ Ksh 499', 499),
+    'min_3': ('8GB+400min, 30day @ Ksh 999', 999),
+    'min_4': ('800min, 30day @ Ksh 1,000', 1000)
+}
 
-# Define states for conversation
-CHOOSING_TYPE, ENTERING_PHONE, ENTERING_MPESA_CONFIRMATION = range(3)
+# Define Conversation States
+CHOOSING_TYPE, CHOOSING_PACKAGE, GETTING_PHONE = range(3)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Starts the bot and sends the welcome message"""
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Send a welcome message and prompt user to view menu."""
+    user_first_name = update.effective_user.first_name
+    await update.message.reply_text(
+        f"Welcome to Bingwa Sokoni Bot by Emmkash Tech, {user_first_name}! Send /menu to view deals."
+    )
+    return ConversationHandler.END
+
+async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Display the main menu with deal types."""
     keyboard = [
-        [InlineKeyboardButton("HTTP Injector 10 Days - 80KES", callback_data="HTTP_10_DAYS")],
-        [InlineKeyboardButton("HTTP Injector 14 Days - 100KES", callback_data="HTTP_14_DAYS")],
+        [InlineKeyboardButton("Data Deals", callback_data='data')],
+        [InlineKeyboardButton("SMS Deals", callback_data='sms')],
+        [InlineKeyboardButton("Minutes Deals", callback_data='minutes')],
+        [InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Welcome to EMMKASH-TECH files generator bot:🤖", reply_markup=reply_markup)
+    await update.message.reply_text("Select a deal type:", reply_markup=reply_markup)
     return CHOOSING_TYPE
 
-async def file_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the file type choice and asks for the phone number"""
+async def cancel_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the cancellation of a purchase."""
+    query = update.callback_query
+    await query.answer()
+    await query.message.reply_text(
+        "You have cancelled the purchase. If you need assistance, click here @emmkash. You can restart anytime by sending /menu."
+    )
+    return ConversationHandler.END
+
+async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the selection of deal type and display relevant packages."""
     query = update.callback_query
     await query.answer()
 
-    selected_package = query.data
-    context.user_data["selected_package"] = selected_package
-    await query.message.reply_text(f"You selected {selected_package.replace('_', ' ').title()}. Please enter your phone number:")
-    return ENTERING_PHONE
+    deal_type = query.data
+    logger.info(f"Deal type selected: {deal_type}")
+    context.user_data['deal_type'] = deal_type
 
-async def enter_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles phone number input and proceeds with the payment"""
-    phone_number = update.message.text
-    context.user_data["phone_number"] = phone_number
+    # Select the appropriate packages based on deal type
+    if deal_type == 'data':
+        packages = data_packages
+    elif deal_type == 'sms':
+        packages = sms_packages
+    elif deal_type == 'minutes':
+        packages = minutes_packages
+    else:
+        await query.message.reply_text("Invalid selection. Please try again.")
+        return ConversationHandler.END
 
-    selected_package = context.user_data["selected_package"]
+    # Create keyboard for packages
+    keyboard = []
+    for key, value in packages.items():
+        keyboard.append([InlineKeyboardButton(value[0], callback_data=key)])
+    keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.message.reply_text("CHAGUA DEAL YAKO:KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU MKUU ", reply_markup=reply_markup)
+    return CHOOSING_PACKAGE
+
+async def choose_package(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the selection of a specific package and prompt for phone number."""
+    query = update.callback_query
+    await query.answer()
+
+    package_key = query.data
+    deal_type = context.user_data.get('deal_type')
+    logger.info(f"Package selected: {package_key} for deal type: {deal_type}")
+
+    # Retrieve the selected package based on deal type
+    if deal_type == 'data':
+        selected_package = data_packages.get(package_key)
+    elif deal_type == 'sms':
+        selected_package = sms_packages.get(package_key)
+    elif deal_type == 'minutes':
+        selected_package = minutes_packages.get(package_key)
+    else:
+        selected_package = None
+
+    if selected_package is None:
+        logger.error(f"Invalid package selection: {package_key} for deal type: {deal_type}")
+        await query.message.reply_text("Invalid package selection. Please try again.")
+        return ConversationHandler.END
+
+    context.user_data['package'] = selected_package
+
+    await query.message.reply_text(
+        f"You selected: {selected_package[0]}.\nPlease enter your phone number:"
+    )
+
+    return GETTING_PHONE
+
+async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the phone number input and initiate payment."""
+    phone_number = update.message.text.strip()
+    context.user_data['phone_number'] = phone_number
+    selected_package = context.user_data.get('package')
+
+    logger.info(f"Phone number entered: {phone_number}")
+
+    if selected_package is None:
+        await update.message.reply_text("No package selected. Please try again.")
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        f"Package: {selected_package[0]}\nPhone Number: {phone_number}\n\nProceeding with payment..."
+    )
 
     # Initiate STK Push
-    transaction_id = await initiate_stk_push(phone_number, 80 if selected_package == "HTTP_10_DAYS" else 100, update)
+    await initiate_stk_push(phone_number, selected_package[1], update)
 
-    # Store transaction ID in user data
-    context.user_data["transaction_id"] = transaction_id
-
-    await update.message.reply_text("Payment initiated! Please enter the full M-Pesa confirmation message you received:✅")
-    return ENTERING_MPESA_CONFIRMATION
-
-async def enter_mpesa_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles M-Pesa confirmation message input and sends the config link."""
-    mpesa_confirmation_message = update.message.text
-    selected_package = context.user_data["selected_package"]
-    user_id = update.effective_user.id
-    transaction_id = context.user_data["transaction_id"]
-    user_phone_number = context.user_data["phone_number"]
-
-    # Validate the confirmation message format
-    if not is_valid_mpesa_confirmation(mpesa_confirmation_message):
-        await update.message.reply_text("Invalid M-Pesa confirmation message format. Please try again.")
-        return ENTERING_MPESA_CONFIRMATION
-
-    # Check if the user has already confirmed for this package
-    if user_id not in user_sent_links:
-        user_sent_links[user_id] = {"HTTP_10_DAYS": False, "HTTP_14_DAYS": False}
-
-    # Check if confirmation message has been used before
-    if mpesa_confirmation_message in used_confirmation_messages:
-        await update.message.reply_text("This M-Pesa confirmation message has already been used. Please verify your payment or contact support.")
-        return ENTERING_MPESA_CONFIRMATION
-
-    # Check payment status from PayHero
-    payment_status, payment_phone_number = await check_payment_status(transaction_id)
-    if payment_status == "successful":
-        if payment_phone_number == user_phone_number:
-            if "DUKE EMMANUEL KIRERA-7." in mpesa_confirmation_message and not user_sent_links[user_id][selected_package]:
-                # Mark the message as used and store the confirmation for the user
-                used_confirmation_messages.add(mpesa_confirmation_message)
-                user_sent_links[user_id][selected_package] = True
-
-                # Get the current link index for the selected package
-                if selected_package == "HTTP_10_DAYS":
-                    link = FILE_LINKS_10_DAYS[current_link_index[selected_package]]
-                    current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_10_DAYS)
-                else:
-                    link = FILE_LINKS_14_DAYS[current_link_index[selected_package]]
-                    current_link_index[selected_package] = (current_link_index[selected_package] + 1) % len(FILE_LINKS_14_DAYS)
-
-                # Send the configuration link
-                await update.message.reply_text(f"Payment confirmed. Here is your config link: {link}")
-
-                # Send guidelines
-                await update.message.reply_text(
-                    "GUIDELINES TO FOLLOW:\n\n"
-                    "1. SEARCH FOR A WORKING IP (10.60s or 10.200s)\n"
-                    "   Example IPs: 10.244; 10.217; 10.216; 10.247; 10.60; 10.246; 10.245; 10.244; 10.209; 10.62; 10.213; 10.210; 10.212; 10.61\n\n"
-                    "2. CONNECT THE TWO HTTP CUSTOM FILES EVERYDAY ONCE IN A DAY:\n"
-                    "   - File 1: 45MB\n"
-                    "   - File 2: 22MB\n"
-                    "   - If you have Roodito data, connect File 1 first, then HTTP Injector.\n\n"
-                    "   Get the 2 HTTP Custom files here: https://t.me/emmkashtech2/2884?single\n\n"
-                    "3. SEARCH FOR ANOTHER IP (must be from the list in Step 1).\n\n"
-                    "4. CONNECT HTTP Injector for unlimited access.\n\n"
-                    "For help, click here: @emmkash\n\n"
-                )
-
-                # Offer the user to choose another file
-                await update.message.reply_text("Choose another file if needed:", reply_markup=InlineKeyboardMarkup([ 
-                    [InlineKeyboardButton("HTTP Injector 10 Days", callback_data="HTTP_10_DAYS")],
-                    [InlineKeyboardButton("HTTP Injector 14 Days", callback_data="HTTP_14_DAYS")],
-                ]))
-                return CHOOSING_TYPE
-            elif user_sent_links[user_id][selected_package]:
-                await update.message.reply_text("You have already confirmed the payment and received the link for this package.")
-                return CHOOSING_TYPE
-            else:
-                await update.message.reply_text("The message you provided does not appear to be a valid M-Pesa confirmation. Please try again.")
-                return ENTERING_MPESA_CONFIRMATION
-        else:
-            await update.message.reply_text("The phone number associated with this payment does not match the one you provided. Please verify your payment or contact support.")
-            return ENTERING_MPESA_CONFIRMATION
-    else:
-        await update.message.reply_text("Payment is still pending. Please wait for confirmation.")
-        return ENTERING_MPESA_CONFIRMATION
+    # Allow user to choose another type after payment
+    return CHOOSING_TYPE
 
 async def initiate_stk_push(phone_number: str, amount: int, update: Update):
     """Initiate STK Push payment via PayHero API."""
+    stk_push_url = "https://backend.payhero.co.ke/api/v2/payments"
+
     payload = {
         "amount": amount,
         "phone_number": phone_number,
         "channel_id": 852,
         "provider": "m-pesa",
         "external_reference": "INV-009",
-        "callback_url": "https://callback1-21e1c9a49f0d.herokuapp.com/billing/callback1"
+        "callback_url": "https://softcash.co.ke/billing/callbackurl.php"
     }
 
-    auth_token = base64.b64encode(f"{API_USERNAME}:{API_PASSWORD}".encode()).decode()
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Basic {auth_token}"
-    }
+    headers = {"Authorization": basic_auth_token}
 
-    response = requests.post(PAYHERO_API_URL, json=payload, headers=headers)
+    try:
+        response = requests.post(stk_push_url, json=payload, headers=headers)
 
-    if response.status_code == 200:
-        transaction_id = response.json().get("transaction_id")
-        await update.message.reply_text(f"STK Push initiated successfully. Transaction ID: {transaction_id}")
-        return transaction_id
-    else:
-        await update.message.reply_text("Failed to initiate payment. Please try again.")
-        return None
+        logger.info(f"STK Push Response Status Code: {response.status_code}")
+        logger.info(f"STK Push Response Content: {response.text}")
 
-async def check_payment_status(transaction_id: str):
-    """Check the payment status via PayHero API."""
-    url = f"{PAYHERO_API_URL}/{transaction_id}"
-    auth_token = base64.b64encode(f"{API_USERNAME}:{API_PASSWORD}".encode()).decode()
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Basic {auth_token}"
-    }
+        response_json = response.json()
+        logger.info(f"STK Push Response JSON: {response_json}")
 
-    response = requests.get(url, headers=headers)
+        if response.status_code in [200, 201]:
+            if response_json.get('success'):
+                status = response_json.get('status')
+                logger.info(f"STK Push Status: {status}")
 
-    if response.status_code == 200:
-        data = response.json()
-        return data.get("status"), data.get("phone_number")  # Assuming "phone_number" is returned with the status
-    else:
-        logger.error(f"Error checking payment status: {response.text}")
-        return None, None
+                if status == 'SUCCESS':
+                    await update.message.reply_text("Payment successful! Thank you for your purchase.🥳✅")
+                else:
+                    await update.message.reply_text("Payment processing. Please wait for confirmation✅✅🥳 For help, click here @emmkash")
+            else:
+                await update.message.reply_text("Payment failed. Please try again.")
+        else:
+            await update.message.reply_text("Error occurred while processing your payment. Please try again.")
 
-def is_valid_mpesa_confirmation(message: str) -> bool:
-    """Validate the M-Pesa confirmation message format."""
-    keywords = ["Payment", "Received", "of", "Ksh"]
-    return all(keyword in message for keyword in keywords)
+    except Exception as e:
+        logger.error(f"Error initiating STK push: {e}")
+        await update.message.reply_text("An error occurred while processing your payment. Please try again.")
 
-def main():
-    """Run the bot."""
+def main() -> None:
+    """Start the Telegram bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # Define handlers
+    menu_handler = CommandHandler('menu', show_menu)
+    start_handler = CommandHandler('start', show_menu)  # Link /start to show_menu
+
+    choose_type_handler = CallbackQueryHandler(choose_type, pattern='^(data|sms|minutes)$')
+    choose_package_handler = CallbackQueryHandler(choose_package, pattern='^(data_\d+|sms_\d+|min_\d+)$')
+    cancel_handler = CallbackQueryHandler(cancel_purchase, pattern='^cancel_purchase$')
+    phone_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)
+
+    # Define ConversationHandler
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+        entry_points=[start_handler, menu_handler],
         states={
-            CHOOSING_TYPE: [CallbackQueryHandler(file_choice_callback)],
-            ENTERING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone_number)],
-            ENTERING_MPESA_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_mpesa_confirmation)],
+            CHOOSING_TYPE: [choose_type_handler],
+            CHOOSING_PACKAGE: [choose_package_handler],
+            GETTING_PHONE: [phone_handler],
         },
-        fallbacks=[CommandHandler('start', start)],
+        fallbacks=[cancel_handler]
     )
 
+    # Add handlers to the application
     application.add_handler(conv_handler)
+
+    logger.info("Starting Bingwa Sokoni Bot...")
     application.run_polling()
 
 if __name__ == '__main__':
