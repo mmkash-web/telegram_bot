@@ -81,7 +81,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send a welcome message and prompt user to view menu."""
     user_first_name = update.effective_user.first_name
     await update.message.reply_text(
-         f"🎄🎅 Merry Christmas Welcome to Bingwa Sokoni Bot by Emmkash Tech! 🎅🎄, {user_first_name}! Send /menu to view deals."
+         f"🎄🎅 Merry Christmas Welcome to Bingwa Sokoni Bot by Emmkash Tech! 🎅🎄, {user_first_name}! Send /menu to view deals. 🎉"
     )
     return ConversationHandler.END
 
@@ -133,7 +133,7 @@ async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text("CHAGUA DEAL YAKO:KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU MKUU ", reply_markup=reply_markup)
+    await query.message.reply_text("🎄🎅 Merry Christmas,🎉 CHAGUA DEAL YAKO:KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU MKUU ", reply_markup=reply_markup)
     return CHOOSING_PACKAGE
 
 async def choose_package(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
