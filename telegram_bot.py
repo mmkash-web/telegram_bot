@@ -68,7 +68,7 @@ sms_packages = {
 }
 
 minutes_packages = {
-    'min_1': ('50 flex, till midnight @ Ksh 50', 50),
+     'min_1': ('50 flex, till midnight @ Ksh 50', 50),
     'min_2': ('300min, 30day @ Ksh 499', 499),
     'min_3': ('8GB+400min, 30day @ Ksh 999', 999),
     'min_4': ('800min, 30day @ Ksh 1,000', 1000)
@@ -78,18 +78,10 @@ minutes_packages = {
 CHOOSING_TYPE, CHOOSING_PACKAGE, GETTING_PHONE = range(3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Send a welcome message and prompt user to view menu with Christmas wishes and animation."""
+    """Send a welcome message and prompt user to view menu."""
     user_first_name = update.effective_user.first_name
-    # Sending Christmas greeting with an animation (animated GIF or Sticker)
-    christmas_gif_url = "https://example.com/christmas_wishes.gif"  # Replace with your desired Christmas GIF URL
     await update.message.reply_text(
-        f"🎄🎅 Merry Christmas, {user_first_name}! 🎅🎄\nWelcome to Bingwa Sokoni Bot by Emmkash Tech! 🎉"
-    )
-    await update.message.reply_animation(
-        christmas_gif_url  # Sending animated GIF
-    )
-    await update.message.reply_text(
-        "Send /menu to view deals and get awesome offers! 🎁"
+         f"🎄🎅 Merry Christmas Welcome to Bingwa Sokoni Bot by Emmkash Tech! 🎅🎄, {user_first_name}! Send /menu to view deals."
     )
     return ConversationHandler.END
 
@@ -222,37 +214,53 @@ async def initiate_stk_push(phone_number: str, amount: int, update: Update):
         response_json = response.json()
         logger.info(f"STK Push Response JSON: {response_json}")
 
-        if response.status_code == 200 and response_json.get('status') == 'success':
-            await update.message.reply_text(
-                "Payment initiated successfully! Please follow the instructions to complete your transaction."
-            )
-        else:
-            await update.message.reply_text(
-                "Oops! Something went wrong. Please try again later."
-            )
-    except Exception as e:
-        logger.error(f"Error during STK Push: {e}")
-        await update.message.reply_text(
-            "An error occurred while processing your payment. Please try again later."
-        )
+        if response.status_code in [200, 201]:
+            if response_json.get('success'):
+                status = response_json.get('status')
+                logger.info(f"STK Push Status: {status}")
 
-def main():
-    """Start the bot and handle commands."""
+                if status == 'SUCCESS':
+                    await update.message.reply_text("Payment successful! Thank you for your purchase.🥳✅")
+                else:
+                    await update.message.reply_text("Payment processing. Please wait for confirmation✅✅🥳 For help, click here @emmkash")
+            else:
+                await update.message.reply_text("Payment failed. Please try again.")
+        else:
+            await update.message.reply_text("Error occurred while processing your payment. Please try again.")
+
+    except Exception as e:
+        logger.error(f"Error initiating STK push: {e}")
+        await update.message.reply_text("An error occurred while processing your payment. Please try again.")
+
+def main() -> None:
+    """Start the Telegram bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Define handlers
+    menu_handler = CommandHandler('menu', show_menu)
+    start_handler = CommandHandler('start', show_menu)  # Link /start to show_menu
+
+    choose_type_handler = CallbackQueryHandler(choose_type, pattern='^(data|sms|minutes)$')
+    choose_package_handler = CallbackQueryHandler(choose_package, pattern='^(data_\d+|sms_\d+|min_\d+)$')
+    cancel_handler = CallbackQueryHandler(cancel_purchase, pattern='^cancel_purchase$')
+    phone_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)
+
+    # Define ConversationHandler
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start), CommandHandler("menu", show_menu)],
+        entry_points=[start_handler, menu_handler],
         states={
-            CHOOSING_TYPE: [CallbackQueryHandler(choose_type)],
-            CHOOSING_PACKAGE: [CallbackQueryHandler(choose_package)],
-            GETTING_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone_number)],
+            CHOOSING_TYPE: [choose_type_handler],
+            CHOOSING_PACKAGE: [choose_package_handler],
+            GETTING_PHONE: [phone_handler],
         },
-        fallbacks=[CallbackQueryHandler(cancel_purchase)],
+        fallbacks=[cancel_handler]
     )
 
+    # Add handlers to the application
     application.add_handler(conv_handler)
 
+    logger.info("Starting Bingwa Sokoni Bot...")
     application.run_polling()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
