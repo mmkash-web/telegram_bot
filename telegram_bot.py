@@ -133,7 +133,7 @@ async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     keyboard.append([InlineKeyboardButton("Cancel Purchase", callback_data='cancel_purchase')])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text(KARIBU, CHAGUA DEAL YAKO:KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU MKUU ", reply_markup=reply_markup)
+    await query.message.reply_text("KARIBU, CHAGUA DEAL YAKO:KUMBUKA KUNUNUA NI MARA MOJA KWA SIKU MKUU ", reply_markup=reply_markup)
     return CHOOSING_PACKAGE
 
 async def choose_package(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
